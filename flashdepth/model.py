@@ -312,11 +312,17 @@ class FlashDepth(nn.Module):
     def forward(self, batch, use_mamba, gif_path, resolution, out_mp4 ,save_depth_npy=False, save_vis_map=False, **kwargs):
         
         # both have shape (B, T, C, H, W)
+        if batch is None:
+            logging.info("Batch is None, returning dummy values")
+
+
         if isinstance(batch, list) or isinstance(batch, tuple):
             video, gt_depth = batch 
         elif isinstance(batch, torch.Tensor):
             video = batch
             gt_depth = None
+            print(f"video shape: {video.shape}, gt_depth shape: {gt_depth.shape if gt_depth is not None else 'None'}")
+
         
         preds = []
 

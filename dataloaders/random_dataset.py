@@ -1,6 +1,7 @@
 import os
 from os.path import join
 import cv2
+from einops import rearrange
 import torch
 import numpy as np
 import tempfile, shutil
@@ -10,6 +11,7 @@ from torch.utils.data import Dataset
 from torchvision.transforms import Compose, Resize
 from PIL import Image
 import torch.distributed as dist
+from tqdm import tqdm
 from .depthanything_preprocess import _load_and_process_image, _load_and_process_depth
 
 class RandomDataset(Dataset):
@@ -33,6 +35,9 @@ class RandomDataset(Dataset):
         return len(self.seq_paths)
         
     def __getitem__(self, idx):
+        limited_cpu_memory = True
+
+
 
         img_paths, tmpdirname = self.parse_seq_path(self.seq_paths[idx])
         img_paths = sorted(img_paths, key=lambda x: int(''.join(filter(str.isdigit, os.path.basename(x)))))
@@ -48,15 +53,34 @@ class RandomDataset(Dataset):
         else:
             res = (w, h)
 
-        for img_path in img_paths:
-            img, _ = _load_and_process_image(img_path, resolution=res, crop_type=None)
-            imgs.append(img)
+        logging.info(f"Processing video {self.seq_paths[idx]} with resolution {res}")
         
+
+        # for img_path in img_paths:
+        imgs_length = 0
+        for img_path in tqdm(img_paths, desc=f"PreProcessing  {os.path.basename(self.seq_paths[idx])}"):
+            img, _ = _load_and_process_image(img_path, resolution=res, crop_type=None) 
+            if limited_cpu_memory:
+                # save img
+                img = img.cpu()
+                img = rearrange(img, 'c h w -> h w c')
+                # print img resolution
+                if img.max() <= 1.0:
+                    img = (img * 255).clamp(0, 255).byte()
+                else:
+                    img = img.byte()  
+                img = Image.fromarray(img.numpy())
+                img.save(f"{os.path.basename(img_path)}")
+                imgs_length += 1
+            else:
+                imgs.append(img)
+
+
         if tmpdirname is not None:
             shutil.rmtree(tmpdirname)
 
-        return dict(batch=torch.stack(imgs).float(), 
-                scene_name=os.path.basename(self.seq_paths[idx].split('.')[0]))
+        return dict(batch=torch.stack(imgs).float() if not limited_cpu_memory else torch.empty(0),
+                scene_name=os.path.basename(self.seq_paths[idx].split('.')[0]), img_paths=img_paths)
 
     def parse_seq_path(self, p):
         cap = cv2.VideoCapture(p)
@@ -64,6 +88,8 @@ class RandomDataset(Dataset):
             raise ValueError(f"Error opening video file {p}")
         video_fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        # for debugging purposes
+        total_frames = min(total_frames, 50)  # limit to 50 frames for testing
         if video_fps == 0:
             cap.release()
             raise ValueError(f"Error: Video FPS is 0 for {p}")
@@ -74,7 +100,8 @@ class RandomDataset(Dataset):
         )
         img_paths = []
         tmpdirname = tempfile.mkdtemp()
-        for i in frame_indices:
+        # for i in frame_indices:
+        for i in tqdm(frame_indices, desc=f"Parsing frames {os.path.basename(p)}"):
             cap.set(cv2.CAP_PROP_POS_FRAMES, i)
             ret, frame = cap.read()
             if not ret:

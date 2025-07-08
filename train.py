@@ -30,6 +30,14 @@ from dataloaders.get_separate_dataloaders import get_all_dataloaders
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
+import psutil
+import os
+
+def print_memory_usage():
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / 1024**2
+    logging.info(f"CPU Memory usage: {mem:.2f} MB")
+
 
 @torch.no_grad()
 def validation(cfg, model, train_step, test_dataloader):
@@ -144,9 +152,11 @@ def inference(cfg, process_dict):
                                   split='test', resolution=cfg.eval.test_dataset_resolution)
         test_dataloader = DataLoader(dataset, batch_size=1, num_workers=0, 
                                  shuffle=False, drop_last=False) 
-        
+    
+    logging.info(f'Loaded testing datasets, {len(test_dataloader)} batches initialized...')
+    print_memory_usage()
 
-    for test_idx, batch in enumerate(tqdm(test_dataloader)):        
+    for test_idx, batch in enumerate(tqdm(test_dataloader)):    
         if isinstance(batch, list) or isinstance(batch, tuple):
             if len(batch) == 3:
                 video, gt_depth, dataset_scene_name = batch
@@ -158,12 +168,18 @@ def inference(cfg, process_dict):
             batch = (video, gt_depth)
             logging.info(f'batch shape: {batch[0].shape}')
         elif isinstance(batch, dict):
+            batch_dict = batch
             batch, scene_name = batch['batch'], batch['scene_name'][0]
+            img_paths = batch_dict['img_paths'] if 'img_paths' in batch_dict else None
+            if img_paths is not None:
+                logging.info(f'img_paths: {img_paths}')
             logging.info(f'shape: {batch.shape}, {scene_name}')
             savepath = os.path.join(cfg.config_dir, cfg.eval.outfolder, scene_name)
             os.makedirs(savepath, exist_ok=True)
         else:
             logging.info(f'shape: {batch.shape}')
+        
+        # logging.info(f"before inference, GPU memory usage: {torch.cuda.memory_allocated()/1024**2:.2f} MB")
 
         with torch.cuda.amp.autocast(dtype=torch.bfloat16):
             _, img_grid = model(
@@ -171,7 +187,7 @@ def inference(cfg, process_dict):
                 gif_path=f'{savepath}/{os.path.basename(cfg.config_dir.rstrip("/"))}_{train_step}_{test_idx}.gif',
                 **eval_args
                 )
-
+        logging.info(f'savepath: {savepath}/{os.path.basename(cfg.config_dir.rstrip("/"))}_{train_step}_{test_idx}.gif')
         if cfg.eval.save_grid:
             img_grid.save(f'{savepath}/{os.path.basename(cfg.config_dir.rstrip("/"))}_{train_step}_{test_idx}.png')
 
@@ -179,6 +195,8 @@ def inference(cfg, process_dict):
     
 
 def main(cfg, process_dict):
+    print_memory_usage()
+
 
     # init dataloader
     dataloaders = get_all_dataloaders(cfg)
@@ -194,6 +212,7 @@ def main(cfg, process_dict):
 
 
     # init model
+    logging.info(f"Starting model setup")
     model, optimizer, lr_scheduler, train_step = setup_model(cfg, process_dict)
 
     logging.info(f"Starting training at step {train_step}")

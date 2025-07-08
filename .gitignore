@@ -4,7 +4,9 @@ logs/
 CLIP/
 taming-transformers/
 dump/
-outputs/
+outputs/flashdepth/outputs
+outputs
+configs/
 flagged/
 *.egg-info
 __pycache__
