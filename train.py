@@ -1,3 +1,4 @@
+import shutil
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -156,7 +157,8 @@ def inference(cfg, process_dict):
     logging.info(f'Loaded testing datasets, {len(test_dataloader)} batches initialized...')
     print_memory_usage()
 
-    for test_idx, batch in enumerate(tqdm(test_dataloader)):    
+    for test_idx, batch in enumerate(tqdm(test_dataloader)): 
+        img_paths = None   
         if isinstance(batch, list) or isinstance(batch, tuple):
             if len(batch) == 3:
                 video, gt_depth, dataset_scene_name = batch
@@ -172,8 +174,10 @@ def inference(cfg, process_dict):
             batch, scene_name = batch['batch'], batch['scene_name'][0]
             img_paths = batch_dict['img_paths'] if 'img_paths' in batch_dict else None
             if img_paths is not None:
-                logging.info(f'img_paths: {img_paths}')
-            logging.info(f'shape: {batch.shape}, {scene_name}')
+                # logging.info(f'img_paths: {img_paths}')
+                logging.info(f'shape {len(img_paths)}, scene_name: {scene_name}')
+            else:
+                logging.info(f'shape: {batch.shape}, {scene_name}')
             savepath = os.path.join(cfg.config_dir, cfg.eval.outfolder, scene_name)
             os.makedirs(savepath, exist_ok=True)
         else:
@@ -185,9 +189,14 @@ def inference(cfg, process_dict):
             _, img_grid = model(
                 batch, 
                 gif_path=f'{savepath}/{os.path.basename(cfg.config_dir.rstrip("/"))}_{train_step}_{test_idx}.gif',
+                img_paths=img_paths if img_paths is not None else None,
                 **eval_args
                 )
-        logging.info(f'savepath: {savepath}/{os.path.basename(cfg.config_dir.rstrip("/"))}_{train_step}_{test_idx}.gif')
+        if img_paths is not None:
+            # rm temporary directory if it exists
+            tmp_dir = os.path.dirname(str(img_paths[0][0])) # since img_paths is a list of tuples, we take the first tuple, and get the first element of the tuple
+            if os.path.exists(tmp_dir):
+                shutil.rmtree(tmp_dir)
         if cfg.eval.save_grid:
             img_grid.save(f'{savepath}/{os.path.basename(cfg.config_dir.rstrip("/"))}_{train_step}_{test_idx}.png')
 

@@ -21,13 +21,13 @@ class RandomDataset(Dataset):
         self.crop_type = crop_type
         self.large_dir = large_dir
 
-        if self.root_dir.endswith('.mp4'):
+        if self.root_dir.endswith('.mp4') or self.root_dir.endswith('.avi'):
             self.seq_paths = [self.root_dir]
         elif os.path.isdir(self.root_dir):
-            self.seq_paths = glob.glob(join(self.root_dir, '*.mp4'))
+            self.seq_paths = glob.glob(join(self.root_dir, '*.mp4')) + glob.glob(join(self.root_dir, '*.avi'))
             self.seq_paths = sorted(self.seq_paths)
         else:
-            raise ValueError(f"provide an mp4 file or a directory of mp4 files")
+            raise ValueError(f"provide an mp4/avi file or a directory of mp4/avi files")
 
         
         
@@ -53,34 +53,37 @@ class RandomDataset(Dataset):
         else:
             res = (w, h)
 
-        logging.info(f"Processing video {self.seq_paths[idx]} with resolution {res}")
         
 
         # for img_path in img_paths:
         imgs_length = 0
+        npy_paths = []
         for img_path in tqdm(img_paths, desc=f"PreProcessing  {os.path.basename(self.seq_paths[idx])}"):
             img, _ = _load_and_process_image(img_path, resolution=res, crop_type=None) 
+            # print( f"max img value: {img.max()}, min img value: {img.min()}")
+
+            
             if limited_cpu_memory:
                 # save img
-                img = img.cpu()
+                img = img.cpu() # float64
+                # print(f"img shape: {img.shape}, dtype: {img.dtype}")
                 img = rearrange(img, 'c h w -> h w c')
-                # print img resolution
-                if img.max() <= 1.0:
-                    img = (img * 255).clamp(0, 255).byte()
-                else:
-                    img = img.byte()  
-                img = Image.fromarray(img.numpy())
-                img.save(f"{os.path.basename(img_path)}")
+                # save as it is as npy
+                npy_path = os.path.join(tmpdirname, f"frame_{imgs_length}.npy")
+                npy_paths.append(npy_path)
+                np.save(npy_path, img.numpy())
                 imgs_length += 1
             else:
                 imgs.append(img)
 
 
-        if tmpdirname is not None:
+        if tmpdirname is not None and not limited_cpu_memory:
+        # after the loop, if we have enough CPU memory, we can rm the tmpdirname
+            logging.info(f"Removing temporary directory {tmpdirname}")
             shutil.rmtree(tmpdirname)
 
         return dict(batch=torch.stack(imgs).float() if not limited_cpu_memory else torch.empty(0),
-                scene_name=os.path.basename(self.seq_paths[idx].split('.')[0]), img_paths=img_paths)
+                scene_name=os.path.basename(self.seq_paths[idx].split('.')[0]), img_paths=npy_paths)
 
     def parse_seq_path(self, p):
         cap = cv2.VideoCapture(p)
@@ -89,7 +92,7 @@ class RandomDataset(Dataset):
         video_fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         # for debugging purposes
-        total_frames = min(total_frames, 50)  # limit to 50 frames for testing
+        # total_frames = min(total_frames, 5) 
         if video_fps == 0:
             cap.release()
             raise ValueError(f"Error: Video FPS is 0 for {p}")

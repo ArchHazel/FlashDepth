@@ -19,6 +19,8 @@ from .util.loss import ScaleAndShiftInvariantLoss
 from utils.helpers import *
 
 from utils.eval_metrics.metrics import compute_depth_metrics
+from torchvision import transforms
+from tqdm import tqdm
 
 
 
@@ -309,34 +311,47 @@ class FlashDepth(nn.Module):
     
     
     @torch.no_grad()
-    def forward(self, batch, use_mamba, gif_path, resolution, out_mp4 ,save_depth_npy=False, save_vis_map=False, **kwargs):
+    def forward(self, batch, use_mamba, gif_path, img_paths, resolution, out_mp4 ,save_depth_npy=False, save_vis_map=False, **kwargs):
         
         # both have shape (B, T, C, H, W)
-        if batch is None:
-            logging.info("Batch is None, returning dummy values")
+        if batch.ndim == 2:
+            logging.info(f"running in a Limited CPU memory mode")
 
 
         if isinstance(batch, list) or isinstance(batch, tuple):
             video, gt_depth = batch 
+            video_length = video.shape[1] if video.ndim == 5 else len(img_paths)
         elif isinstance(batch, torch.Tensor):
             video = batch
+            video_length = video.shape[1] if video.ndim == 5 else len(img_paths)
             gt_depth = None
-            print(f"video shape: {video.shape}, gt_depth shape: {gt_depth.shape if gt_depth is not None else 'None'}")
+            print(f"video length: {video_length}, gt_depth shape: {gt_depth.shape if gt_depth is not None else 'None'}")
 
-        
         preds = []
 
         loss = 0
         if use_mamba:
             self.mamba.start_new_sequence()
 
-        for i in range(video.shape[1]):
+        # for i in range(video_length):
+        for i in tqdm(range(video_length), desc=f"Doing inference"):
             warmup_frames = 5
             if kwargs.get('print_time', False) and i==warmup_frames:
                 torch.cuda.synchronize()
                 start = time.time()
-            frame = video[:, i, :, :, :].to(torch.cuda.current_device())
+            if video.ndim == 5:
+                frame = video[:, i, :, :, :].to(torch.cuda.current_device())
+            else:
+                # reading from img_paths
+                # print(f"img_paths: {img_paths[i]}")
+                frame = np.load(img_paths[i][0])
+                tensor = transforms.ToTensor()(frame).to(torch.float32)
+                # unsqueeze frame
+                frame = tensor.to(torch.cuda.current_device())
+                # print(f"dtype of frame: {frame.dtype}, shape of frame: {frame.shape}")
+                frame.unsqueeze_(0) # add batch dimension
             B, C, H, W = frame.shape
+            # print(f"Processing frame {i+1}/{video_length} with shape {frame.shape}")
 
        
             patch_h, patch_w = frame.shape[-2] // self.patch_size, frame.shape[-1] // self.patch_size
@@ -368,7 +383,7 @@ class FlashDepth(nn.Module):
             try:
                 torch.cuda.synchronize()
                 end = time.time()
-                logging.info(f'wall time taken: {end - start:.2f}; fps: {((video.shape[1]-warmup_frames) / (end - start)):.2f}; num frames: {video.shape[1]-warmup_frames}')
+                logging.info(f'wall time taken: {end - start:.2f}; fps: {((video_length-warmup_frames) / (end - start)):.2f}; num frames: {video_length-warmup_frames}')
             except Exception as e:
                 logging.info(f"Error in printing time: {e}")
                 pass
@@ -377,17 +392,17 @@ class FlashDepth(nn.Module):
             return 0,0
 
 
-        return self.save_and_return(video, gt_depth, preds, loss, save_depth_npy, gif_path, save_vis_map, out_mp4, resolution, kwargs)
+        return self.save_and_return(video, gt_depth, preds, loss, save_depth_npy, gif_path, save_vis_map, out_mp4, resolution, video_length, img_paths, kwargs)
 
 
 
 
     @torch.compiler.disable
-    def save_and_return(self, video, gt_depth, preds, loss, save_depth_npy, gif_path, save_vis_map, out_mp4, resolution, kwargs):
+    def save_and_return(self, video, gt_depth, preds, loss, save_depth_npy, gif_path, save_vis_map, out_mp4, resolution, video_length, img_paths, kwargs):
 
         grid = None
         if gt_depth is not None and kwargs.get('use_metrics', True):
-            l1_loss = loss / video.shape[1]
+            l1_loss = loss / video_length
 
             # calculating metrics across sequence
             preds_tensor = torch.stack(preds, dim=1).cpu().float() # (1, T, H, W)
@@ -410,7 +425,10 @@ class FlashDepth(nn.Module):
                     pred0.append(preds[i][0].cpu()) 
                 pred0 = torch.stack(pred0)
                 pred_save = depth_to_np_arr(pred0)
-                video_save = torch_batch_to_np_arr(video[0])
+                if video.ndim == 5:
+                    video_save = torch_batch_to_np_arr(video[0])
+                else:
+                    video_save = None
                 if gt_depth is not None:
                     gt_save = depth_to_np_arr(gt_depth[0])
                 else:
@@ -428,7 +446,7 @@ class FlashDepth(nn.Module):
                 if not out_mp4:
                     grid = save_gifs_as_grid(video_save,gt_save,pred_save, output_path=gif_path, fixed_height=resolution)
                 else:
-                    grid = save_grid_to_mp4(video_save,gt_save,pred_save, output_path=gif_path.replace('.gif', '.mp4'), fixed_height=video.shape[-2])
+                    grid = save_grid_to_mp4(video_save,gt_save,pred_save, output_path=gif_path.replace('.gif', '.mp4'),img_paths = img_paths)
             except Exception as e:
                 logging.info(f"Error in saving video: {e}")
                 pass

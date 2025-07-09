@@ -8,7 +8,7 @@ import matplotlib
 import logging
 import json, argparse
 import re
-
+from tqdm import tqdm
 
 
 
@@ -419,7 +419,7 @@ def save_gifs_as_grid(video_frames, gt_frames, pred_frames, output_path, fixed_h
     return {'stacked_frames': concat_frames, 'grid_img': grid_img}
 
 
-def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_height=256, spacing=5, fps=24):
+def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_height=256, spacing=5, fps=24, img_paths=None):
     """
     Create MP4 videos: one with all frames side by side, and one with only predictions.
     
@@ -434,17 +434,43 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
     """
     from PIL import Image
     import cv2
+
+
     
     frames = []
     concat_frames = []  # Will store the numpy arrays
-    n_frames = len(video_frames)
+    print(f"{video_frames == None}, {gt_frames == None}, {pred_frames == None}")
+    if video_frames is None:
+        n_frames = len(img_paths)
+    else:
+        n_frames = len(video_frames)
+    print(f"Saving {n_frames} frames to {output_path}")
     assert len(pred_frames) == n_frames, "Video and prediction frames must have same length"
     if gt_frames is not None:
         assert len(gt_frames) == n_frames, "Ground truth frames must have same length"
     
     # Process first frame to get dimensions for video writer
-    video_img = Image.fromarray(video_frames[0])
+    if video_frames is not None:
+        video_frames = [np.array(frame) for frame in video_frames]
+        video_img = Image.fromarray(video_frames[0])
+    else:
+        video_img = np.load(img_paths[0][0])
+        #to torch tensor
+        tensor = torch.from_numpy(video_img).float()
+        print(f"video_img shape: {tensor.shape}")
+        # change from (H, W, C) to (C, H, W)
+        tensor = tensor.permute(2, 0, 1)
+        video_img = tensor.unsqueeze(0)
+        video_img = torch_batch_to_np_arr(video_img)
+        video_img = video_img[0]  # Get the first frame
+        video_img = Image.fromarray(video_img)
+    print(f"First frame size: {video_img.size}")
+        
+
+    
     pred_img = Image.fromarray(pred_frames[0])
+    fixed_height = video_img.height
+    print(f"Fixed height for video: {fixed_height}")
     
     frame_images = [video_img]
     if gt_frames is not None:
@@ -460,6 +486,7 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
     
     # Calculate total width needed
     total_width = sum(img.width for img in frame_images) + spacing * (len(frame_images) - 1)
+    print(f"Total width for video: {total_width}, fixed height: {fixed_height}")
     
     # Initialize video writer
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -473,9 +500,25 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
     pred_writer = cv2.VideoWriter(pred_output_path, fourcc, fps, (pred_width, fixed_height))
     
     # Process all frames
-    for i in range(n_frames):
+    # for i in range(n_frames):
+    for i in tqdm(range(n_frames), desc=f"Saving {output_path}"):
+
+
         # Convert and resize each frame
-        video_img = Image.fromarray(video_frames[i])
+        if video_frames is not None:
+            video_img = Image.fromarray(video_frames[i])
+        else:
+            video_img = np.load(img_paths[i][0])
+            tensor = torch.from_numpy(video_img).float()
+            tensor = tensor.permute(2, 0, 1)  # Change from (H, W, C) to (C, H, W)
+            video_img = tensor.unsqueeze(0)
+            video_img = torch_batch_to_np_arr(video_img)
+            video_img = video_img[0]  # Get the first frame
+            video_img = Image.fromarray(video_img)
+
+        # print(video_img.size)
+
+
         pred_img = Image.fromarray(pred_frames[i])
         
         frame_images = [video_img]
@@ -492,6 +535,7 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
         
         # Create a new frame with white background
         frame = Image.new('RGB', (total_width, fixed_height), color='white')
+        # print(f"Frame {i}: {video_img.size}, {pred_img.size}, {gt_img.size if gt_frames is not None else 'N/A'}")
         
         # Paste images with spacing
         x_offset = 0
@@ -524,14 +568,14 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
     pred_writer.release()
 
     # Stack all concatenated frames along time dimension
-    concat_frames = np.stack(concat_frames, axis=0)  # Shape: (T, C, H, W)
+    # concat_frames = np.stack(concat_frames, axis=0)  # Shape: (T, C, H, W)
     
-    np_frames = [np.array(frame) for frame in frames]
-    grid_img = save_images_as_grid(np_frames, fixed_height=fixed_height, spacing=spacing, max_per_row=1)
+    # np_frames = [np.array(frame) for frame in frames]
+    # grid_img = save_images_as_grid(np_frames, fixed_height=fixed_height, spacing=spacing, max_per_row=1)
     
     return {
-        'stacked_frames': concat_frames,
-        'grid_img': grid_img,
+        'stacked_frames': 0,  # Placeholder, not used in this function
+        'grid_img': 0,
         'video_path': output_path,
         'pred_video_path': pred_output_path
     }
