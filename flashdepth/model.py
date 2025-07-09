@@ -376,9 +376,13 @@ class FlashDepth(nn.Module):
                 #     loss += F.l1_loss(pred_depth[valid_mask], gt_frame[valid_mask])
                 # else:
                 loss += F.l1_loss(pred_depth[valid_mask], gt_frame[valid_mask])
+            
+            if batch.ndim == 5:
+                preds.append(pred_depth)
+            else:
+                np.save(img_paths[i][0].replace('.npy', '_pred.npy'), pred_depth.cpu().float().numpy().squeeze(0))
 
-            preds.append(pred_depth)
-        
+
         if kwargs.get('print_time', False):
             try:
                 torch.cuda.synchronize()
@@ -420,11 +424,14 @@ class FlashDepth(nn.Module):
         
         if kwargs.get('out_video', True):
             try:
-                pred0 = []
-                for i in range(len(preds)):
-                    pred0.append(preds[i][0].cpu()) 
-                pred0 = torch.stack(pred0)
-                pred_save = depth_to_np_arr(pred0)
+                if video.ndim == 5:
+                    pred0 = []
+                    for i in range(len(preds)):
+                        pred0.append(preds[i][0].cpu()) 
+                    pred0 = torch.stack(pred0)
+                    pred_save = depth_to_np_arr(pred0)
+                else:
+                    pred_save = None
                 if video.ndim == 5:
                     video_save = torch_batch_to_np_arr(video[0])
                 else:

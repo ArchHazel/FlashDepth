@@ -445,7 +445,7 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
     else:
         n_frames = len(video_frames)
     print(f"Saving {n_frames} frames to {output_path}")
-    assert len(pred_frames) == n_frames, "Video and prediction frames must have same length"
+    # assert len(pred_frames) == n_frames, "Video and prediction frames must have same length"
     if gt_frames is not None:
         assert len(gt_frames) == n_frames, "Ground truth frames must have same length"
     
@@ -457,20 +457,28 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
         video_img = np.load(img_paths[0][0])
         #to torch tensor
         tensor = torch.from_numpy(video_img).float()
-        print(f"video_img shape: {tensor.shape}")
+        # print(f"video_img shape: {tensor.shape}")
         # change from (H, W, C) to (C, H, W)
         tensor = tensor.permute(2, 0, 1)
         video_img = tensor.unsqueeze(0)
         video_img = torch_batch_to_np_arr(video_img)
         video_img = video_img[0]  # Get the first frame
         video_img = Image.fromarray(video_img)
-    print(f"First frame size: {video_img.size}")
         
 
+    if pred_frames is not None:
+        pred_img = Image.fromarray(pred_frames[0])
+    else:
+        pred_img = np.load(img_paths[0][0].replace('.npy', '_pred.npy'))
+        # print(f"shape of pred_img: {pred_img.shape}, dtype: {pred_img.dtype}")
+        tensor = torch.from_numpy(pred_img).float() # h,w
+        tensor = tensor.unsqueeze(0)  # Add batch dimension # (1, H, W)
+        depth_save = depth_to_np_arr(tensor) ## max min logit need to be fixed
+        pred_img = Image.fromarray(depth_save[0])
+
     
-    pred_img = Image.fromarray(pred_frames[0])
     fixed_height = video_img.height
-    print(f"Fixed height for video: {fixed_height}")
+    # print(f"Fixed height for video: {fixed_height}")
     
     frame_images = [video_img]
     if gt_frames is not None:
@@ -486,7 +494,7 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
     
     # Calculate total width needed
     total_width = sum(img.width for img in frame_images) + spacing * (len(frame_images) - 1)
-    print(f"Total width for video: {total_width}, fixed height: {fixed_height}")
+    # print(f"Total width for video: {total_width}, fixed height: {fixed_height}")
     
     # Initialize video writer
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -494,7 +502,6 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
     
     # Create a second video writer for predictions-only
     pred_output_path = output_path.rsplit('.', 1)[0] + '_pred.mp4'
-    pred_img = Image.fromarray(pred_frames[0])
     aspect_ratio = pred_img.width / pred_img.height
     pred_width = int(fixed_height * aspect_ratio)
     pred_writer = cv2.VideoWriter(pred_output_path, fourcc, fps, (pred_width, fixed_height))
@@ -518,9 +525,15 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
 
         # print(video_img.size)
 
+        if pred_frames is not None:
+            pred_img = Image.fromarray(pred_frames[i])
+        else:
+            pred_img = np.load(img_paths[i][0].replace('.npy', '_pred.npy'))
+            tensor = torch.from_numpy(pred_img).float() # h,w
+            tensor = tensor.unsqueeze(0)  # Add batch dimension # (1, H, W)
+            depth_save = depth_to_np_arr(tensor) ## max min logit need to be fixed
+            pred_img = Image.fromarray(depth_save[0])
 
-        pred_img = Image.fromarray(pred_frames[i])
-        
         frame_images = [video_img]
         if gt_frames is not None:
             gt_img = Image.fromarray(gt_frames[i])
@@ -558,7 +571,6 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
         video_writer.write(opencv_frame)
         
         # Write prediction-only frame
-        pred_img = Image.fromarray(pred_frames[i])
         pred_img.thumbnail((pred_width, fixed_height), Image.Resampling.LANCZOS)
         pred_opencv = cv2.cvtColor(np.array(pred_img), cv2.COLOR_RGB2BGR)
         pred_writer.write(pred_opencv)
