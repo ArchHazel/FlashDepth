@@ -556,15 +556,15 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
             frame.paste(img, (x_offset, 0))
             x_offset += img.width + spacing
         
-        frames.append(frame)
+        # frames.append(frame)
         
         # Create concatenated numpy array for this timestep
         np_images = [np.array(img) for img in frame_images]
         # Convert to shape (C, H, W)
         np_images = [img.transpose(2, 0, 1) for img in np_images]
         # Concatenate along width dimension
-        concat_frame = np.concatenate(np_images, axis=2)  # Concatenate along W dimension
-        concat_frames.append(concat_frame)
+        # concat_frame = np.concatenate(np_images, axis=2)  # Concatenate along W dimension
+        # concat_frames.append(concat_frame)
         
         # Convert PIL image to OpenCV format (RGB to BGR) and write to video
         opencv_frame = cv2.cvtColor(np.array(frame), cv2.COLOR_RGB2BGR)
