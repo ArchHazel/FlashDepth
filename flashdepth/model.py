@@ -381,6 +381,9 @@ class FlashDepth(nn.Module):
                 preds.append(pred_depth)
             else:
                 np.save(img_paths[i][0].replace('.npy', '_pred.npy'), pred_depth.cpu().float().numpy().squeeze(0))
+                npy_path = os.path.join(os.path.dirname(gif_path), 'depth_npy_files') #, test_idx)
+                os.makedirs(npy_path, exist_ok=True)
+                np.save(f"{npy_path}/frame_{i}.npy", pred_depth.cpu().float().numpy().squeeze(0))
 
 
         if kwargs.get('print_time', False):
@@ -419,7 +422,7 @@ class FlashDepth(nn.Module):
             test_idx = gif_path.rstrip('.gif').split('_')[-1]
             npy_path = os.path.join(os.path.dirname(gif_path), 'depth_npy_files') #, test_idx)
             os.makedirs(npy_path, exist_ok=True)
-            for i in range(video_length):
+            for i in range(len(preds)):
                 np.save(f'{npy_path}/frame_{i}.npy', preds[i].cpu().float().numpy().squeeze(0))
         
         if kwargs.get('out_video', True):
