@@ -39,7 +39,7 @@ class RandomDataset(Dataset):
 
 
 
-        img_paths, tmpdirname = self.parse_seq_path(self.seq_paths[idx])
+        img_paths, tmpdirname, video_fps = self.parse_seq_path(self.seq_paths[idx])
         img_paths = sorted(img_paths, key=lambda x: int(''.join(filter(str.isdigit, os.path.basename(x)))))
         imgs = []
 
@@ -83,7 +83,7 @@ class RandomDataset(Dataset):
             shutil.rmtree(tmpdirname)
 
         return dict(batch=torch.stack(imgs).float() if not limited_cpu_memory else torch.empty(0),
-                scene_name=os.path.basename(self.seq_paths[idx].split('.')[0]), img_paths=npy_paths)
+                scene_name=os.path.basename(self.seq_paths[idx].split('.')[0]), img_paths=npy_paths, fps=video_fps)
 
     def parse_seq_path(self, p):
         cap = cv2.VideoCapture(p)
@@ -92,7 +92,7 @@ class RandomDataset(Dataset):
         video_fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         # for debugging purposes
-        # total_frames = min(total_frames, 5) 
+        total_frames = min(total_frames, 2) 
         if video_fps == 0:
             cap.release()
             raise ValueError(f"Error: Video FPS is 0 for {p}")
@@ -113,4 +113,4 @@ class RandomDataset(Dataset):
             cv2.imwrite(frame_path, frame)
             img_paths.append(frame_path)
         cap.release()
-        return img_paths, tmpdirname
+        return img_paths, tmpdirname, video_fps

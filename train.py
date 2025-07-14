@@ -172,6 +172,7 @@ def inference(cfg, process_dict):
         elif isinstance(batch, dict):
             batch_dict = batch
             batch, scene_name = batch['batch'], batch['scene_name'][0]
+            video_fps = batch_dict['fps'] 
             img_paths = batch_dict['img_paths'] if 'img_paths' in batch_dict else None
             if img_paths is not None:
                 # logging.info(f'img_paths: {img_paths}')
@@ -190,6 +191,7 @@ def inference(cfg, process_dict):
                 batch, 
                 gif_path=f'{savepath}/{os.path.basename(cfg.config_dir.rstrip("/"))}_{train_step}_{test_idx}.gif',
                 img_paths=img_paths if img_paths is not None else None,
+                video_fps=video_fps,
                 **eval_args
                 )
         if img_paths is not None:

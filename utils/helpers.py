@@ -439,7 +439,7 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
     
     frames = []
     concat_frames = []  # Will store the numpy arrays
-    print(f"{video_frames == None}, {gt_frames == None}, {pred_frames == None}")
+    # print(f"{video_frames == None}, {gt_frames == None}, {pred_frames == None}")
     if video_frames is None:
         n_frames = len(img_paths)
     else:
@@ -498,6 +498,8 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
     
     # Initialize video writer
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fps = fps.double().cpu().item()
+    print(f"Using FPS: {fps}")
     video_writer = cv2.VideoWriter(output_path, fourcc, fps, (total_width, fixed_height))
     
     # Create a second video writer for predictions-only

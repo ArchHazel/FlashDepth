@@ -311,7 +311,7 @@ class FlashDepth(nn.Module):
     
     
     @torch.no_grad()
-    def forward(self, batch, use_mamba, gif_path, img_paths, resolution, out_mp4 ,save_depth_npy=False, save_vis_map=False, **kwargs):
+    def forward(self, batch, use_mamba, gif_path, img_paths, resolution, out_mp4 ,save_depth_npy=False, save_vis_map=False,video_fps =24, **kwargs):
         
         # both have shape (B, T, C, H, W)
         if batch.ndim == 2:
@@ -396,13 +396,13 @@ class FlashDepth(nn.Module):
             return 0,0
 
 
-        return self.save_and_return(video, gt_depth, preds, loss, save_depth_npy, gif_path, save_vis_map, out_mp4, resolution, video_length, img_paths, kwargs)
+        return self.save_and_return(video, gt_depth, preds, loss, save_depth_npy, gif_path, save_vis_map, out_mp4, resolution, video_length, img_paths, video_fps, kwargs)
 
 
 
 
     @torch.compiler.disable
-    def save_and_return(self, video, gt_depth, preds, loss, save_depth_npy, gif_path, save_vis_map, out_mp4, resolution, video_length, img_paths, kwargs):
+    def save_and_return(self, video, gt_depth, preds, loss, save_depth_npy, gif_path, save_vis_map, out_mp4, resolution, video_length, img_paths, video_fps,kwargs):
 
         grid = None
         if gt_depth is not None and kwargs.get('use_metrics', True):
@@ -419,7 +419,7 @@ class FlashDepth(nn.Module):
             test_idx = gif_path.rstrip('.gif').split('_')[-1]
             npy_path = os.path.join(os.path.dirname(gif_path), 'depth_npy_files') #, test_idx)
             os.makedirs(npy_path, exist_ok=True)
-            for i in range(len(preds)):
+            for i in range(video_length):
                 np.save(f'{npy_path}/frame_{i}.npy', preds[i].cpu().float().numpy().squeeze(0))
         
         if kwargs.get('out_video', True):
@@ -453,7 +453,7 @@ class FlashDepth(nn.Module):
                 if not out_mp4:
                     grid = save_gifs_as_grid(video_save,gt_save,pred_save, output_path=gif_path, fixed_height=resolution)
                 else:
-                    grid = save_grid_to_mp4(video_save,gt_save,pred_save, output_path=gif_path.replace('.gif', '.mp4'),img_paths = img_paths)
+                    grid = save_grid_to_mp4(video_save,gt_save,pred_save, output_path=gif_path.replace('.gif', '.mp4'),img_paths = img_paths,fps= video_fps)
             except Exception as e:
                 logging.info(f"Error in saving video: {e}")
                 pass
