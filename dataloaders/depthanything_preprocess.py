@@ -108,11 +108,14 @@ def _load_and_process_image(image_path, crop_type=None, resolution=None, resize_
             image = image[y:y + target_h, x:x + target_w]
     
     elif resolution is not None:
+        print(f"resolution is {resolution}, resizing image")
         target_w, target_h = resolution  # Unpack width and height
         image = cv2.resize(image, (target_w, target_h), interpolation=cv2.INTER_CUBIC)
         image = np.clip(image, 0, 1)
     
+    print(f"before processing img shape: {image.shape}, dtype: {image.dtype}")
     image = depthanything_preprocess(image, color_aug=kwargs.get('color_aug', False))
+    print(f"after processing img shape: {image.shape}, dtype: {image.dtype}")
     return image, _current_crop
 
 def _load_and_process_depth(inverse_depth, image_shape, _current_crop, crop_type=None, resolution=None, resize_factor=1.0, **kwargs):

@@ -60,6 +60,7 @@ class RandomDataset(Dataset):
         npy_paths = []
         for img_path in tqdm(img_paths, desc=f"PreProcessing  {os.path.basename(self.seq_paths[idx])}"):
             img, _ = _load_and_process_image(img_path, resolution=res, crop_type=None) 
+            print(f"after processing img shape: {img.shape}, dtype: {img.dtype}")
             # print( f"max img value: {img.max()}, min img value: {img.min()}")
 
             
@@ -110,6 +111,7 @@ class RandomDataset(Dataset):
             if not ret:
                 break
             frame_path = os.path.join(tmpdirname, f"frame_{i}.jpg")
+            print(f"frame size: {frame.shape}, saving to {frame_path}")
             cv2.imwrite(frame_path, frame)
             img_paths.append(frame_path)
         cap.release()

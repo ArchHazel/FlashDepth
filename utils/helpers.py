@@ -478,6 +478,7 @@ def save_grid_to_mp4(video_frames, gt_frames, pred_frames, output_path, fixed_he
 
     
     fixed_height = video_img.height
+    print(f"Fixed height for video: {fixed_height}")
     # print(f"Fixed height for video: {fixed_height}")
     
     frame_images = [video_img]
